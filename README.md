@@ -30,8 +30,8 @@ ProstateRegistrationG6/
 ├───data/ - folder containing data files 
 |   └── pXXX/ - contains image and segmentation mask data in .mhd and .zraw format
 │
-├───paramaters/ - folder containing parameter files
-│   └── paramaters*.txt - holds configuration for registration
+├───parameters/ - folder containing parameter files
+│   └── parameters.txt - holds configuration for registration
 |
 └───saved/ - generated log files
 ```
