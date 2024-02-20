@@ -16,7 +16,8 @@ import glob
 
 class Dataset():
     def __init__(self):
-        self.data_path = "data"
+        self.dir = "data"
+        self.data_paths = self.get_data_paths()
 
     def get_data_paths(self):
         """
@@ -25,7 +26,7 @@ class Dataset():
         Returns:
             list: list of [image, mask] paths.
         """        
-        filelist = glob.glob(os.path.join(self.data_path, "*"))
+        filelist = glob.glob(os.path.join(self.dir, "*"))
         data_paths = list()
 
         for data_dir in filelist:
@@ -34,6 +35,9 @@ class Dataset():
             data_paths.append([image_mhd_path, mask_mhd_path])
         
         return data_paths
+    
+    def __length__(self):
+        return len(self.data_paths)
     
     def __getitem__(self, index):
         """Returns array data from image and mask for a given index.
@@ -44,7 +48,7 @@ class Dataset():
         Returns:
             list: list of [image, mask] numpy.ndarray 
         """        
-        data_path = self.get_data_paths()[index]
+        data_path = self.data_paths[index]
         output = list()
 
         for i, path in enumerate(data_path):
