@@ -23,17 +23,38 @@ img, mask = dataset[0]
 # dataset.plot_data(3, slice=40)
 
 # %% Registration
-ELASTIX_PATH = "C:\\elastix\\elastix.exe"
-TRANSFORMIX_PATH = "C:\\elastix\\transformix.exe"
+# Setup Elastix
+ELASTIX_PATH = "C:\\Users\\20203531\\Documents\\2. TUe\\8DM20\\Elastix\\elastix.exe"
+TRANSFORMIX_PATH = "C:\\Users\\20203531\\Documents\\2. TUe\\8DM20\\Elastix\\transformix.exe"
+# ELASTIX_PATH = "C:\\elastix\\elastix.exe"
+# TRANSFORMIX_PATH = "C:\\elastix\\transformix.exe"
 el = elastix.ElastixInterface(elastix_path=ELASTIX_PATH)
 
+# Select parameter file
+parameter_files = [
+    "parameters.txt",
+    "Par0001affine.txt",
+    "Par0001bspline04.txt",
+    "Par0001bspline08.txt",
+    "Par0001bspline16.txt",
+    "Par0001bspline32.txt",
+    "Par0001bspline64.txt",
+    "Par0001rigid.txt",
+    "Par0001translation.txt",
+    "Par0043rigid.txt",
+    "Par0055.txt"
+]
+parameter_file = parameter_files[1]
+
+# Select fixed and moving images
 fixed_image_path = dataset.data_paths[0][0]
 moving_image_path = dataset.data_paths[1][0]
 
+# Define registration
 el.register(
     fixed_image=fixed_image_path,
     moving_image=moving_image_path,
-    parameters=[os.path.join("parameters", "parameters.txt")], # tune this, currently it is using b-spline transforms
+    parameters=[os.path.join("parameters", parameter_file)],
     output_dir="results")
 
 # %% Atlas transformation
