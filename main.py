@@ -13,6 +13,7 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
+import itk
 from dataset import Dataset
 
 #%% Global variables
@@ -28,10 +29,11 @@ class Registration():
         self.results_dir = "results"
         self.parameters_dir = "parameters"
     
-    def select_data_paths(self, atlas_image_path, atlas_label_path, target_image_path):
+    def select_data_paths(self, atlas_image_path, atlas_label_path, target_image_path, target_label_path):
         self.atlas_image_path = atlas_image_path  # moving image
         self.atlas_label_path = atlas_label_path  # moving segmentation
         self.target_image_path = target_image_path  # fixed image
+        self.target_label_path = target_label_path
     
     def img_from_path(self, img_path):
         return sitk.GetArrayFromImage(sitk.ReadImage(img_path))
@@ -69,7 +71,7 @@ class Registration():
     def plot_registration_results(self):
         atlas_label_image = self.img_from_path(self.atlas_label_path)
         atlas_label_overlay = self.overlay_from_segmentation(atlas_label_image)
-        atlas_label_deformed_image = self.img_from_path(self.atlas_label_deformed_path)
+        atlas_label_deformed_image = self.overlay_from_segmentation(self.transform_atlas_label(self.atlas_label_path))
         atlas_label_deformed_overlay = self.overlay_from_segmentation(atlas_label_deformed_image)
 
         fig, ax = plt.subplots(2, 2, figsize=(10, 8))
@@ -86,34 +88,38 @@ class Registration():
             col = i % 2
             ax[row, col].imshow(self.img_from_path(image_path)[40, :, :], cmap="gray")
             if overlay_img is not None:
-                ax[row, col].imshow(overlay_img[40, :, :], cmap="jet", alpha=0.6)
+                ax[row, col].imshow(overlay_img[40, :, :], cmap="Wistia", alpha=0.6)
             ax[row, col].set_title(title)
             ax[row, col].axis('off')
-
+        ax[1,1].imshow(self.overlay_from_segmentation(self.img_from_path(self.target_label_path)[40,:,:]), cmap="spring", alpha=1)
         fig.suptitle("Atlas registration results")
         plt.tight_layout()
         plt.show()
     
     # Elastix functions    
     def transform_atlas_label(self, atlas_label_path):
-        tr = elastix.TransformixInterface(parameters=os.path.join(self.results_dir, "TransformParameters.0.txt"),
-                                        transformix_path=TRANSFORMIX_PATH)
-        atlas_label_deformed_path = tr.transform_image(
-            atlas_label_path, output_dir=self.results_dir)
-        
-        return atlas_label_deformed_path
+        self.result_transform_parameters.SetParameter(0, "FinalBSplineInterpolationOrder", "0")
+        moving_image_transformix = itk.imread(atlas_label_path, itk.F)
+        transformix_object = itk.TransformixFilter.New(moving_image_transformix)
+        transformix_object.SetTransformParameterObject(self.result_transform_parameters)
+        transformix_object.UpdateLargestPossibleRegion()
+        self.atlas_label_deformed_image = transformix_object.GetOutput()
+        return self.atlas_label_deformed_image
 
     def perform_registration(self, parameter_file, plot):
-        el = elastix.ElastixInterface(elastix_path=ELASTIX_PATH)
-        el.register(
-            fixed_image=self.target_image_path,
-            moving_image=self.atlas_image_path,
-            parameters=[os.path.join(self.parameters_dir, parameter_file)],
-            output_dir=self.results_dir)
-        self.atlas_image_deformed_path = os.path.join(self.results_dir, "result.0.mhd")
-
-        self.atlas_label_deformed_path = self.transform_atlas_label(
-            self.atlas_label_path)
+        parameter_object = itk.ParameterObject.New()
+        parameter_object.AddParameterFile(os.path.join(self.parameters_dir, parameter_file))
+        fixed_image = itk.imread(self.target_image_path, itk.F)
+        moving_image = itk.imread(self.atlas_image_path, itk.F)
+        elastix_object = itk.ElastixRegistrationMethod.New(fixed_image, moving_image)
+        elastix_object.SetParameterObject(parameter_object)
+        elastix_object.SetOutputDirectory(self.results_dir)
+        elastix_object.LogToFileOn()
+        elastix_object.UpdateLargestPossibleRegion()
+        self.result_image = elastix_object.GetOutput()
+        self.result_transform_parameters = elastix_object.GetTransformParameterObject()
+        self.atlas_image_deformed_path = os.path.join(self.results_dir, "result.0.mha")
+        itk.imwrite(self.result_image, self.atlas_image_deformed_path)
         
         if plot:
             self.plot_registration_process(parameter_file)
@@ -127,8 +133,10 @@ class Registration():
             label2_path (str): Path to the second label/segmentation image.
         """
         # Load label images
-        label1_image = self.img_from_path(label1_path)
+        # label1_image = self.img_from_path(label1_path)
+        label1_image = label1_path
         label2_image = self.img_from_path(label2_path)
+        print(np.unique(label1_image), np.unique(label2_image))
         
         # Compute overlap
         overlap = np.multiply(label1_image, label2_image)
@@ -159,7 +167,8 @@ class Registration():
     
     # Validation
     def calculate_dsc(self, label1_path, label2_path):
-        label1_image = self.img_from_path(label1_path)
+        # label1_image = self.img_from_path(label1_path)
+        label1_image = label1_path
         label2_image = self.img_from_path(label2_path)
         overlap = np.multiply(label1_image, label2_image)
         dice = (2*np.sum(overlap))/(np.sum(label1_image)+np.sum(label2_image))
@@ -193,10 +202,13 @@ atlas_index = 2
 registration = Registration()
 registration.select_data_paths(atlas_image_path=dataset.data_paths[atlas_index][0],
                                atlas_label_path=dataset.data_paths[atlas_index][1],
-                               target_image_path=dataset.data_paths[target_index][0])
+                               target_image_path=dataset.data_paths[target_index][0],
+                               target_label_path=dataset.data_paths[target_index][1])
 
 registration.perform_registration(parameter_file = parameter_files[0],
                                   plot = True)
-
-dice = registration.calculate_dsc(label1_path = registration.atlas_label_deformed_path,
+#%%
+dice = registration.calculate_dsc(label1_path = registration.atlas_label_deformed_image,
                                   label2_path=dataset.data_paths[target_index][1])
+
+# %%
