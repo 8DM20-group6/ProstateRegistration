@@ -17,11 +17,10 @@ from dataset import Dataset
 
 #%% Global variables
 # Setup Elastix
-ELASTIX_PATH = "C:\\Users\\20203531\\Documents\\2. TUe\\8DM20\\Elastix\\elastix.exe"
-TRANSFORMIX_PATH = "C:\\Users\\20203531\\Documents\\2. TUe\\8DM20\\Elastix\\transformix.exe"
-# ELASTIX_PATH = "C:\\elastix\\elastix.exe"
-# TRANSFORMIX_PATH = "C:\\elastix\\transformix.exe"
-el = elastix.ElastixInterface(elastix_path=ELASTIX_PATH)
+# ELASTIX_PATH = "C:\\Users\\20203531\\Documents\\2. TUe\\8DM20\\Elastix\\elastix.exe"
+# TRANSFORMIX_PATH = "C:\\Users\\20203531\\Documents\\2. TUe\\8DM20\\Elastix\\transformix.exe"
+ELASTIX_PATH = "C:\\elastix\\elastix.exe"
+TRANSFORMIX_PATH = "C:\\elastix\\transformix.exe"
 
 # %% Registration functions
 class Registration():
@@ -105,6 +104,7 @@ class Registration():
         return atlas_label_deformed_path
 
     def perform_registration(self, parameter_file, plot):
+        el = elastix.ElastixInterface(elastix_path=ELASTIX_PATH)
         el.register(
             fixed_image=self.target_image_path,
             moving_image=self.atlas_image_path,
@@ -154,7 +154,6 @@ class Registration():
         cbar.set_ticks([1, 2, 3])
         cbar.set_ticklabels(['Label 1', 'Label 2', 'Overlap'])
     
-        plt.title("Segmentations and overlap")
         plt.tight_layout()
         plt.show()
     
@@ -201,4 +200,3 @@ registration.perform_registration(parameter_file = parameter_files[0],
 
 dice = registration.calculate_dsc(label1_path = registration.atlas_label_deformed_path,
                                   label2_path=dataset.data_paths[target_index][1])
-
