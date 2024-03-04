@@ -36,7 +36,7 @@ class Dataset():
         
         return data_paths
     
-    def __length__(self):
+    def __len__(self):
         return len(self.data_paths)
     
     def __getitem__(self, index):
