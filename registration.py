@@ -7,6 +7,7 @@ import itk
 import elastix
 import os
 import random
+from LabelFusion.wrapper import fuse_images
 
 class Registration():
     """
@@ -189,7 +190,11 @@ class MultiRegistrationFusion:
         # Select N random atlas images to register onto target image
         atlas_indexes = random.sample(
             [idx for idx in range(len(self.dataset.data_paths)) if idx != target_index], nr_atlas_registrations)
-        
+
+        #List that will contain all the deformed labels to fuse        
+        images_to_fuse = []
+
+
         # Perform registration for each randomly selected atlas image
         for atlas_index in atlas_indexes:
             registration_name = f"{self.parameter_file[:-4]}_T{target_index}_A{atlas_index}"
@@ -211,10 +216,21 @@ class MultiRegistrationFusion:
                 results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method,
                           "target_index": target_index, "atlas_index": atlas_index, "dice": dice}])
                 self.validation_results = pd.concat([self.validation_results, results], ignore_index=True)
-        
+            # Read the deformed labels one by one and store them in a list
+            registered_label_image = sitk.ReadImage(registration.atlas_label_deformed_path, sitk.sitkUInt8)
+            images_to_fuse.append(registered_label_image)
+
+        # Perform label fusion using the fused_simple strategy (modify as needed: STAPLE, MayorityVoting, ITKVoting, SIMPLE)
+        fused_result = fuse_images(images_to_fuse, method ='STAPLE', class_list=[0, 1, 2, 4])
+
+        # Write the fused result to output file
+        fused_atlas_label_path = f"results/{self.parameter_file[:-4]}_T{target_index}_FusedLabel.mhd"
+        sitk.WriteImage(fused_result, fused_atlas_label_path)
+
+
         # Combine labels
-        fused_atlas_label_path = self.label_fusion(
-            atlas_indexes=atlas_indexes, target_index=target_index)
+        # fused_atlas_label_path = self.label_fusion(
+        #     atlas_indexes=atlas_indexes, target_index=target_index)
         
         if validate:
             print("Validating performance of fused atlas label")

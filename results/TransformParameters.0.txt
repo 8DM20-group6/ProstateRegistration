@@ -1,4 +1,5 @@
 (CenterOfRotationPoint 11.821635 20.307046000000007 -9.818100000000001)
+(ComputeZYX "false")
 (Direction 1 0 0 0 1 0 0 0 1)
 (FixedImageDimension 3)
 (FixedInternalImagePixelType "float")
@@ -7,12 +8,12 @@
 (InitialTransformParameterFileName "NoInitialTransform")
 (MovingImageDimension 3)
 (MovingInternalImagePixelType "float")
-(NumberOfParameters 12)
+(NumberOfParameters 6)
 (Origin -54.0963 -60.7476 -52.3181)
 (Size 271 333 86)
 (Spacing 0.488281 0.488281 1)
-(Transform "AffineTransform")
-(TransformParameters 0.9664083348578305 0.11745130410494144 0.03353810376522281 -0.023637545114478076 0.908445914537129 -0.10628621519088055 -0.014294327737956098 -0.026169733156313543 0.8766471854357947 -2.0167359294941702 6.858431034995747 13.799459616079742)
+(Transform "EulerTransform")
+(TransformParameters 0.027917279729003458 -0.06521952892793578 -0.021181507504718783 2.939366766971372 -0.7233276415104332 -5.737043972216391)
 (UseDirectionCosines "true")
 
 // ResampleInterpolator specific
@@ -21,7 +22,7 @@
 
 // Resampler specific
 (CompressResultImage "false")
-(DefaultPixelValue 0)
+(DefaultPixelValue -1024)
 (Resampler "DefaultResampler")
-(ResultImageFormat "mhd")
+(ResultImageFormat "gipl")
 (ResultImagePixelType "float")
