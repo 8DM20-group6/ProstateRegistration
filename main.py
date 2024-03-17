@@ -81,7 +81,7 @@ def test_registration(parameter_index=1, plot=True):
 
     return results
 
-results = test_registration(parameter_index=0)
+# results = test_registration(parameter_index=0)
 
 #%%%%%%%%%%%%%% Multi-atlas registration %%%%%%%%%%%%%%%
 parameter_files = [
@@ -97,32 +97,34 @@ parameter_files = [
 ]
 fusion_methods = ["staple", "majorityvoting", "itkvoting", "SIMPLE"]
 
-#%% Perform multi-atlas registration on ONE target image
-multi_registration_fusion = MultiRegistrationFusion(
-    dataset=dataset, parameter_file=parameter_files[0], fusion_method=fusion_methods[0])#1
-fused_atlas_label_path, results = multi_registration_fusion.perform_multi_atlas_registration(target_index=2, nr_atlas_registrations=2)
+def test_multi_registration(parameter_index=0, fusion_index=0):
+    """Function to test multi-atlas registration functionality"""
 
-#%% Perform multi-atlas registration on ONE target image with ALL parameter files 
-for parameter_file in parameter_files[1:]:
-    print(parameter_file)
+    # Perform multi-atlas registration on ONE target image
     multi_registration_fusion = MultiRegistrationFusion(
-        dataset=dataset, parameter_file=parameter_file, fusion_method=fusion_methods[0], validation_results=results)
-    fused_atlas_label_path, results = multi_registration_fusion.perform_multi_atlas_registration(target_index=3, nr_atlas_registrations=3)
+        dataset=dataset, parameter_file=parameter_files[0], fusion_method=fusion_methods[0])
+    fused_atlas_label_path, results = multi_registration_fusion.perform_multi_atlas_registration(target_index=2, nr_atlas_registrations=2)
+
+    # Perform multi-atlas registration on ONE target image with ALL parameter files 
+    # for parameter_file in parameter_files[1:]:
+    #     print(parameter_file)
+    #     multi_registration_fusion = MultiRegistrationFusion(
+    #         dataset=dataset, parameter_file=parameter_file, fusion_method=fusion_methods[0], validation_results=results)
+    #     fused_atlas_label_path, results = multi_registration_fusion.perform_multi_atlas_registration(target_index=3, nr_atlas_registrations=3)
+        
+    # # Perform multi-atlas registration on ALL target image
+    # multi_registration_fusion = MultiRegistrationFusion(
+    #     dataset=dataset, parameter_file=parameter_files[0], fusion_method=fusion_methods[0])
+    # results = multi_registration_fusion.full_multi_atlas_registration(nr_atlas_registrations=3)
+
+    # # Perform multi-atlas registration on ALL target images with ALL parameter files
+    # results = pd.DataFrame(columns=["parameter_file", "fusion_method", "target_index", "atlas_index", "dice"])
+
+    # for parameter_file in parameter_files:
+    #     multi_registration_fusion = MultiRegistrationFusion(dataset, parameter_file, 
+    #                                                         fusion_method=fusion_methods[0], results=results)
+    #     results = multi_registration_fusion.full_multi_atlas_registration(nr_atlas_registrations=3)
     
-#%% Perform multi-atlas registration on ALL target image
-multi_registration_fusion = MultiRegistrationFusion(
-    dataset=dataset, parameter_file=parameter_files[0], fusion_method=fusion_methods[0])
-results = multi_registration_fusion.full_multi_atlas_registration(nr_atlas_registrations=3)
 
-#%% Perform multi-atlas registration on ALL target images with ALL parameter files
-results = pd.DataFrame(columns=["parameter_file", "fusion_method", "target_index", "atlas_index", "dice"])
+test_multi_registration(parameter_index=0, fusion_index=1)
 
-for parameter_file in parameter_files:
-    multi_registration_fusion = MultiRegistrationFusion(dataset, parameter_file, 
-                                                        fusion_method=fusion_methods[0], results=results)
-    results = multi_registration_fusion.full_multi_atlas_registration(nr_atlas_registrations=3)
-    
-
-#%%
-filtered_results = results[results['atlas_index'] == 'fused_atlas']
-print(filtered_results)

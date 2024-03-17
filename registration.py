@@ -167,7 +167,7 @@ class Registration():
         self.transform_atlas_label(self.atlas_label_path)
 
         if plot:
-            self.plot_registration_process(self.parameter_file)
+            self.plot_registration_process()
             self.plot_registration_results()
             
 
