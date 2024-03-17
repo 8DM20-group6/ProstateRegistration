@@ -1,6 +1,5 @@
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import numpy as np
 import pandas as pd
 import itk
@@ -13,55 +12,58 @@ class Registration():
     """
     Class to manage and visualize the registration process.
     """
-    def __init__(self):
-        """Initialize directories for storing results and parameters."""
-        self.results_dir = "results"
-        self.parameters_dir = "parameters"
-    
-    def select_data_paths(self, atlas_image_path, atlas_label_path, target_image_path, target_label_path=None, registration_name=0):
-        """
-        Select paths for input data.
 
-        Args:
+    def __init__(self, atlas_image_path, atlas_label_path, target_image_path, parameter_file, target_label_path=None, registration_name=0):
+        """
             atlas_image_path (str): Path to the moving image (atlas).
             atlas_label_path (str): Path to the segmentation of the moving image.
             target_image_path (str): Path to the fixed image (target).
+            parameter_file (str): Name of the parameter file for registration.
             target_label_path (str, optional): Path to the segmentation of the fixed image.
             registration_name (int or str, optional): Name identifier for the registration process.
-
         """
+        self.results_dir = "results"
+        self.parameters_dir = "parameters"
+
+        # Set input data paths
         self.atlas_image_path = atlas_image_path
         self.atlas_label_path = atlas_label_path
         self.target_image_path = target_image_path
         self.target_label_path = target_label_path
+        
+        # Registration parameters
+        self.parameter_file = parameter_file
         self.registration_name = registration_name
+        # define number of steps
+        if type(self.parameter_file) == list:
+            self.registration_setps = len(self.parameter_file)
+        else:
+            self.registration_setps = 1
     
     # Plotting
-    def plot_registration_process(self, title):
-        """Plot the registration process, metric vs iterations
+    def plot_registration_process(self):
+        """Plot the registration process, metric vs iterations"""
+        for i in range(self.registration_setps):
+            title = self.parameter_file if self.registration_setps == 1 else self.parameter_file[i]
+            plt.figure(figsize=(8, 4))
+            # Iterate over files in the directory
+            for filename in os.listdir(self.results_dir):
+                if filename.startswith(f"IterationInfo.{i}.") and filename.endswith(".txt"):
+                    filepath = os.path.join(self.results_dir, filename)
+                    log = elastix.logfile(filepath)
 
-        Args:
-            title (str): parameter files used for registration
-        """
-        plt.figure(figsize=(8, 4))
-        # Iterate over files in the directory
-        for filename in os.listdir(self.results_dir):
-            if filename.startswith("IterationInfo.0.") and filename.endswith(".txt"):
-                filepath = os.path.join(self.results_dir, filename)
-                log = elastix.logfile(filepath)
+                    itnrs = log['itnr']
+                    metrics = log['metric']
 
-                itnrs = log['itnr']
-                metrics = log['metric']
+                    plt.plot(itnrs, metrics, label=filename)
 
-                plt.plot(itnrs, metrics, label=filename)
+            # Set axis labels and title
+            plt.xlabel('Iterations')
+            plt.ylabel('Metric Value')
+            plt.title(title)
 
-        # Set axis labels and title
-        plt.xlabel('Iterations')
-        plt.ylabel('Metric Value')
-        plt.title(title)
-
-        plt.legend()
-        plt.show()
+            plt.legend()
+            plt.show()
     
     def plot_registration_results(self):
         """Plot registration results."""
@@ -103,25 +105,30 @@ class Registration():
             atlas_label_path (str): Path to the label of the moving image (atlas).
         """
         # Setup transformation
-        self.result_transform_parameters.SetParameter(0, "FinalBSplineInterpolationOrder", "0")
-        # TODO could look other interpolations, however this seems to work fine
+        for i in range(self.registration_setps):
+            # Need to set the interpolation order for every transform parameter to 0 for a binary image
+            self.result_transform_parameters.SetParameter(i, "FinalBSplineInterpolationOrder", "0")
+            
         moving_image_transformix = itk.imread(atlas_label_path, itk.F)
         transformix_object = itk.TransformixFilter.New(moving_image_transformix)
         transformix_object.SetTransformParameterObject(self.result_transform_parameters)
         transformix_object.UpdateLargestPossibleRegion()
-        
-        # Save results
+
         self.atlas_label_deformed_image = transformix_object.GetOutput()
+        
+        # Make sure output label is binary
+        # self.atlas_label_deformed_image = sitk.BinaryThreshold(self.atlas_label_deformed_image, lowerThreshold=0.5, upperThreshold=1.0, insideValue=1, outsideValue=0)
         self.atlas_label_deformed_path = os.path.join(
             self.results_dir, f"{self.registration_name}_atlas_label_deformed.mhd")
+        
+        # Save results
         itk.imwrite(self.atlas_label_deformed_image,
                     self.atlas_label_deformed_path)
 
-    def perform_registration(self, parameter_file, plot):
+    def perform_registration(self, plot):
         """Perform registration using specified parameter file.
 
         Args:
-            parameter_file (str): Name of the parameter file for registration.
             plot (bool): Whether to plot registration process and results.
         """
         # Read images
@@ -131,7 +138,12 @@ class Registration():
         
         # Setup parameter object
         parameter_object = itk.ParameterObject.New()
-        parameter_object.AddParameterFile(os.path.join(self.parameters_dir, parameter_file))
+        if type(self.parameter_file) == list:
+            # Registration is multistep if a list of parameter files is inputted
+            for parameter in self.parameter_file:
+                parameter_object.AddParameterFile(os.path.join(self.parameters_dir, parameter))
+        else:
+            parameter_object.AddParameterFile(os.path.join(self.parameters_dir, self.parameter_file))
         elastix_object.SetParameterObject(parameter_object)
         
         # Perform registration
@@ -142,24 +154,26 @@ class Registration():
         # Save results
         self.result_transform_parameters = elastix_object.GetTransformParameterObject()
         self.atlas_image_deformed_image = elastix_object.GetOutput()
+        # self.atlas_image_deformed_path = os.path.join(
+        #     self.results_dir, "result.0.mhd")
+
+        
         self.atlas_image_deformed_path = os.path.join(
-            self.results_dir, "result.0.mhd")
-        # Only temporarily save deformed moving image 
-        # (saving with code below gave errors with some parameter files)
-        #     f"{self.registration_name}_atlas_image_deformed.mhd")
-        # itk.imwrite(self.atlas_image_deformed_image,
-        #             self.atlas_image_deformed_path)
+            self.results_dir, f"{self.registration_name}_atlas_image_deformed.mhd")
+        itk.imwrite(self.atlas_image_deformed_image,
+                    self.atlas_image_deformed_path)
         
         # Transform atlas label with registration result
         self.transform_atlas_label(self.atlas_label_path)
 
         if plot:
-            self.plot_registration_process(parameter_file)
+            self.plot_registration_process(self.parameter_file)
             self.plot_registration_results()
+            
 
 class MultiRegistrationFusion:
     """A class for performing multi-atlas registration and fusion of medical images."""
-    def __init__(self, dataset, parameter_file, fusion_method="MajorityVoting", validation_results=None):
+    def __init__(self, dataset, parameter_file, fusion_method="MajorityVoting", validation_results=None, plot=True):
         """Initialize the MultiRegistrationFusion object.
 
         Args:
@@ -169,11 +183,12 @@ class MultiRegistrationFusion:
         """
         self.dataset = dataset
         self.parameter_file = parameter_file
-        self.fusion_method = fusion_method
+        self.fusion_method = fusion_method  # STAPLE, MayorityVoting, ITKVoting, SIMPLE
         if validation_results is None:
             self.validation_results = pd.DataFrame(columns=["parameter_file", "fusion_method", "target_index", "atlas_index", "dice"])
         else:
             self.validation_results = validation_results
+        self.plot = plot
 
     def perform_multi_atlas_registration(self, target_index, nr_atlas_registrations=4, validate=True):
         """Perform multi-atlas registration for a specific target image.
@@ -192,50 +207,72 @@ class MultiRegistrationFusion:
             [idx for idx in range(len(self.dataset.data_paths)) if idx != target_index], nr_atlas_registrations)
 
         #List that will contain all the deformed labels to fuse        
-        images_to_fuse = []
-
+        labels_to_fuse = []
 
         # Perform registration for each randomly selected atlas image
         for atlas_index in atlas_indexes:
             registration_name = f"{self.parameter_file[:-4]}_T{target_index}_A{atlas_index}"
             
-            registration = Registration()
-            registration.select_data_paths(atlas_image_path=self.dataset.data_paths[atlas_index][0],
+            registration = Registration(atlas_image_path=self.dataset.data_paths[atlas_index][0],
                                             atlas_label_path=self.dataset.data_paths[atlas_index][1],
                                             target_image_path=self.dataset.data_paths[target_index][0],
                                             target_label_path=self.dataset.data_paths[target_index][1],
-                                            registration_name=registration_name)
+                                            registration_name=registration_name,
+                                            parameter_file=self.parameter_file)
             
-            registration.perform_registration(parameter_file=self.parameter_file, 
-                                              plot=True)
+            registration.perform_registration(plot=self.plot)
             
             if validate:
                 print("Validating performance of atlas label")
                 dice = calculate_dsc(label1_path=registration.atlas_label_deformed_path,
-                                    label2_path=registration.target_label_path, plot=True)
+                                    label2_path=registration.target_label_path, plot=self.plot)
                 results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method,
                           "target_index": target_index, "atlas_index": atlas_index, "dice": dice}])
                 self.validation_results = pd.concat([self.validation_results, results], ignore_index=True)
+            
             # Read the deformed labels one by one and store them in a list
             registered_label_image = sitk.ReadImage(registration.atlas_label_deformed_path, sitk.sitkUInt8)
-            images_to_fuse.append(registered_label_image)
+            labels_to_fuse.append(registered_label_image)
 
         # Perform label fusion using the fused_simple strategy (modify as needed: STAPLE, MayorityVoting, ITKVoting, SIMPLE)
-        fused_result = fuse_images(images_to_fuse, method ='STAPLE', class_list=[0, 1, 2, 4])
+        if self.fusion_method == "SIMPLE":
+            fused_result = fuse_images(
+                labels_to_fuse, method=self.fusion_method, class_list=[0, 1])
+        else:
+            fused_result = fuse_images(
+                labels_to_fuse, method=self.fusion_method)
 
         # Write the fused result to output file
         fused_atlas_label_path = f"results/{self.parameter_file[:-4]}_T{target_index}_FusedLabel.mhd"
         sitk.WriteImage(fused_result, fused_atlas_label_path)
 
-
-        # Combine labels
-        # fused_atlas_label_path = self.label_fusion(
-        #     atlas_indexes=atlas_indexes, target_index=target_index)
+        # Plot individual labels and fused label
+        fig, axes = plt.subplots(1, len(labels_to_fuse) + 2, figsize=(15, 5))
+        for i, label in enumerate(labels_to_fuse):
+            axes[i].imshow(sitk.GetArrayFromImage(label[:, :, 40]), cmap='Reds', vmin=0, vmax=1)
+            axes[i].contour(sitk.GetArrayFromImage(
+                label[:, :, 40]), colors='black', linewidths=0.5)
+            axes[-1].imshow(sitk.GetArrayFromImage(label[:, :, 40]), cmap='Reds', vmin=0, vmax=1.5, alpha=0.6)
+            axes[-1].contour(sitk.GetArrayFromImage(label[:, :, 40]),
+                             colors='black', linewidths=0.5)
+            axes[i].set_title(f"Label {i+1}")
+            axes[i].axis('off')
+        axes[-2].imshow(sitk.GetArrayFromImage(fused_result[:, :, 40]), cmap='Blues', vmin=0, vmax=1)
+        axes[-2].contour(sitk.GetArrayFromImage(fused_result[:,
+                         :, 40]), colors='black', linewidths=0.5)
+        axes[-2].set_title("Fused Label")
+        axes[-2].axis('off')
+        axes[-1].imshow(sitk.GetArrayFromImage(fused_result[:, :, 40]), cmap='Blues', vmin=0, vmax=1.5, alpha=0.8)
+        axes[-1].contour(sitk.GetArrayFromImage(fused_result[:,
+                         :, 40]), colors='black', linewidths=0.5)
+        axes[-1].set_title("Combination plot")
+        axes[-1].axis('off')
+        plt.show()
         
         if validate:
             print("Validating performance of fused atlas label")
             fused_dice = calculate_dsc(label1_path=fused_atlas_label_path,
-                                label2_path=registration.target_label_path, plot=True)
+                                       label2_path=registration.target_label_path, plot=self.plot)
             results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method,
                       "target_index": target_index, "atlas_index": "fused_atlas", "dice": fused_dice}])
             self.validation_results = pd.concat([self.validation_results, results], ignore_index=True)
@@ -250,60 +287,6 @@ class MultiRegistrationFusion:
             _ = self.perform_multi_atlas_registration(nr_atlas_registrations, target_index, validate)
         return self.validation_results
 
-    def label_fusion(self, atlas_indexes, target_index):
-        """Fuse labels from registered atlas images.
-
-        Args:
-            atlas_indexes (list): Indexes of atlas images used for fusion.
-            target_index (int): Index of the target image in the dataset.
-
-        Returns:
-            str: Path to the fused label.
-        """
-        fused_label = None
-        individual_labels = []
-
-        # TODO implement other fusion methods (look in literature or experiment)
-        if self.fusion_method == "MajorityVoting":
-            
-            for atlas_index in atlas_indexes:
-                # Load the deformed atlas label
-                registration_name = f"{self.parameter_file[:-4]}_T{target_index}_A{atlas_index}_atlas_label_deformed.mhd"
-                deformed_label_path = os.path.join("results", registration_name)
-                deformed_label = itk.imread(deformed_label_path, itk.UC)
-
-                # Store individual labels for plotting
-                individual_labels.append(deformed_label)
-
-                # Initialize fused label for first iteration
-                if fused_label is None:
-                    fused_label = np.zeros(deformed_label.shape, dtype=np.uint8)
-
-                # Update fused label for majority voting, sum binary images
-                fused_label += deformed_label
-
-            # Apply majority voting rule, select part of label where 
-            # at least half of the insividual labels have a value of 1
-            fused_label[fused_label < (len(atlas_indexes) / 2)] = 0
-            fused_label[fused_label >= (len(atlas_indexes) / 2)] = 1
-
-        # Plot individual labels and fused label
-        fig, axes = plt.subplots(
-            1, len(individual_labels) + 1, figsize=(15, 5))
-        for i, label in enumerate(individual_labels):
-            axes[i].imshow(label[40, :, :], cmap='gray')
-            axes[i].set_title(f"Atlas {i+1} Label")
-            axes[i].axis('off')
-        axes[-1].imshow(fused_label[40, :, :], cmap='gray')
-        axes[-1].set_title("Fused Label")
-        axes[-1].axis('off')
-        plt.show()
-
-        # Save the fused label
-        fused_atlas_label_path = f"results/{self.parameter_file[:-4]}_T{target_index}_FusedLabel.mhd"
-        itk.imwrite(itk.GetImageFromArray(fused_label), fused_atlas_label_path)
-        return fused_atlas_label_path
-
 # TODO could move these functions to a utils file
 def img_from_path(img_path):
     return sitk.GetArrayFromImage(sitk.ReadImage(img_path))
@@ -312,37 +295,41 @@ def overlay_from_segmentation(img_segmentation):
     return np.ma.masked_where(img_segmentation == 0, img_segmentation)
     
 # Validation
-def plot_dice(label1_img, label2_img, target_img_path=None):
+def plot_dice(label1_img, label2_img, target_img_path=None, pixel_cutoff=50):
     """Plot the overlap between two labels along with their individual regions.
     
     Args:
         label1_img (ndarray): First label/segmentation image.
         label2_img (ndarray): Second label/segmentation image.
     """
-    # Set alpha channel to 0 for pixels with value 0
-    label1_alpha = np.where(label1_img == 1, 1, 0)
-    label2_alpha = np.where(label2_img == 1, 1, 0)
-    overlap_alpha = np.where(np.logical_and(label1_img, label2_img) == 1, 1, 0)
-
     # Plotting
     fig, ax = plt.subplots(1, 3, figsize=(12, 4))
 
-    ax[0].imshow(label1_alpha[40, :, :], cmap='Blues')
-    ax[0].set_title('Label 1')
+    ax[0].imshow(label1_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
+                  cmap='Reds', vmin=0, vmax=1)
+    ax[0].contour(label1_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
+                   colors='black', linewidths=0.5)
+    ax[0].set_title("Segmentation 1")
     ax[0].axis('off')
 
-    ax[1].imshow(label2_alpha[40, :, :], cmap='Reds')
-    ax[1].set_title('Label 2')
+    ax[1].imshow(label2_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
+                  cmap='Blues', vmin=0, vmax=1)
+    ax[1].contour(label2_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
+                   colors='black', linewidths=0.5)
+    ax[1].set_title("Segmentation 2")
     ax[1].axis('off')
 
-    # TODO improve this plot
-    ax[2].imshow(label1_alpha[40, :, :], cmap='Blues', alpha=0.8)
-    ax[2].imshow(label2_alpha[40, :, :], cmap='Reds', alpha=0.8)
-    ax[2].imshow(overlap_alpha[40, :, :], cmap='Purples')
-    if target_img_path is not None:
-        ax[2].imshow(img_from_path(target_img_path)[40, :, :], cmap='Purples')
-    ax[2].set_title('Overlap between Label 1 and Label 2')
+    ax[2].imshow(label1_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
+                  cmap='Reds', vmin=0, vmax=1.5, alpha=0.8)
+    ax[2].imshow(label2_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
+                  cmap='Blues', vmin=0, vmax=1.5, alpha=0.6)
+    ax[2].contour(label1_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
+                   colors='black', linewidths=0.5)
+    ax[2].contour(label2_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
+                   colors='black', linewidths=0.5)
+    ax[2].set_title('Both Segmentations')
     ax[2].axis('off')
+    ax[2].set_facecolor('white')
 
     plt.tight_layout()
     plt.show()
@@ -361,4 +348,3 @@ def calculate_dsc(label1_path, label2_path, plot=False):
         
     return dice
 
-# TODO add hausdorff and other metrics

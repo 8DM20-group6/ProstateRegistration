@@ -43,7 +43,12 @@ The Elastix model zoo contains a large collection of parameter files for registr
 - Par0055 (intra-subject cine-MRI motion; rigid transformation) [3] 
 
 ### Combining atlas segmentations
-
+We use the LabelFusion python library to combine the atlas segmentations into one label
+Available LabelFusion:
+Voting (ITK): DOI:10.1016/j.patrec.2005.03.017
+STAPLE (ITK): DOI:10.1109/TMI.2004.830803
+Majority Voting: DOI:10.1007/978-3-319-20801-5_11
+SIMPLE: DOI:10.1109/tmi.2010.2057442
 
 ## Bibliography
 [1] S. Klein, U.A. van der Heide, I.M. Lips, M. van Vulpen, M. Staring and J.P.W. Pluim, "Automatic Segmentation of the Prostate in 3D MR Images by Atlas Matching using Localised Mutual Information," Medical Physics, vol. 35, no. 4, pp. 1407 - 1417, April 2008
