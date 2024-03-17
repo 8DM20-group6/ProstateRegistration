@@ -25,10 +25,10 @@
 
 (HowToCombineTransforms "Compose")
 
-(WriteResultImage "false")
+(WriteResultImage "true")
 (WriteResultImageAfterEachResolution "false") 
 (WriteTransformParametersEachIteration "false")
-(WriteTransformParametersEachResolution "true")
+(WriteTransformParametersEachResolution "false")
 
 //Maximum number of iterations in each resolution level:
 (MaximumNumberOfIterations 2000 ) 
