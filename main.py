@@ -85,22 +85,22 @@ results = test_registration(parameter_index=0)
 
 #%%%%%%%%%%%%%% Multi-atlas registration %%%%%%%%%%%%%%%
 parameter_files = [
+    "Par0001rigid.txt",
+    "Par0001affine.txt",
+    "Par0043rigid.txt",
+    "Par0055.txt",
     ["Par0001translation.txt", "Par0001bspline64.txt", "Par0001bspline32.txt",
      "Par0001bspline16.txt", "Par0001bspline08.txt"],
     ["Par0001translation.txt", "Par0001bspline64.txt"],
     ["Par0001translation.txt", "Par0001bspline16.txt"],
-    ["Par0001translation.txt", "Par0001bspline4.txt"],
-    "Par0001bspline16.txt",
-    ["Par0001translation.txt", "Par0001affine.txt"],
-    "Par0043rigid.txt",
-    "Par0055.txt"
+    ["Par0001translation.txt", "Par0001bspline4.txt"]
 ]
 fusion_methods = ["staple", "majorityvoting", "itkvoting", "SIMPLE"]
 
 #%% Perform multi-atlas registration on ONE target image
 multi_registration_fusion = MultiRegistrationFusion(
     dataset=dataset, parameter_file=parameter_files[0], fusion_method=fusion_methods[0])#1
-fused_atlas_label_path, results = multi_registration_fusion.perform_multi_atlas_registration(target_index=2, nr_atlas_registrations=3)
+fused_atlas_label_path, results = multi_registration_fusion.perform_multi_atlas_registration(target_index=2, nr_atlas_registrations=2)
 
 #%% Perform multi-atlas registration on ONE target image with ALL parameter files 
 for parameter_file in parameter_files[1:]:
