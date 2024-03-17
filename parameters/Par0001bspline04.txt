@@ -15,20 +15,20 @@
 (Optimizer "StandardGradientDescent")
 (ResampleInterpolator "FinalBSplineInterpolator")
 (Resampler "DefaultResampler")
-(Transform "BSplineTransform")
+(Transform "BSplineTransform") ////// bspline
 
 (ErodeMask "false" )
 
 (NumberOfResolutions 4)
-(FinalGridSpacingInPhysicalUnits 4.0)
+(FinalGridSpacingInPhysicalUnits 4.0) ////// bspline4.0
 (GridSpacingSchedule 8.0 4.0 2.0 1.0)
 
 (HowToCombineTransforms "Compose")
 
-(WriteResultImage "false")
+(WriteResultImage "true")
 (WriteResultImageAfterEachResolution "false") 
 (WriteTransformParametersEachIteration "false")
-(WriteTransformParametersEachResolution "true")
+(WriteTransformParametersEachResolution "false")
 
 //Maximum number of iterations in each resolution level:
 (MaximumNumberOfIterations 2000 ) 

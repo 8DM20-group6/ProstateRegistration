@@ -34,4 +34,4 @@
 (ShowExactMetricValue "false")
 (Transform "EulerTransform")
 (WriteIterationInfo "true")
-(WriteResultImage "false")
+(WriteResultImage "true")
