@@ -15,9 +15,12 @@ import os
 import glob
 
 class Dataset():
-    def __init__(self):
+    def __init__(self, n_validation=3):
         self.dir = "data"
         self.data_paths = self.get_data_paths()
+        self.data_paths_optimize = self.get_data_paths()[:-n_validation]
+        self.data_paths_validate = self.get_data_paths()[-n_validation:]
+        # TODO add random component to selecting validation samples
 
     def get_data_paths(self):
         """
@@ -83,3 +86,7 @@ class Dataset():
         plt.tight_layout()
         plt.show()
 
+if __name__ == "__main__":
+    dataset = Dataset()
+    for i in range(len(dataset)):
+        dataset.plot(i)
