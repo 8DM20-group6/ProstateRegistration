@@ -7,6 +7,8 @@ import elastix
 import os
 import random
 from LabelFusion.wrapper import fuse_images
+import sklearn
+from sklearn.metrics import normalized_mutual_info_score
 
 class Registration():
     """
@@ -21,6 +23,7 @@ class Registration():
             parameter_file (str): Name of the parameter file for registration.
             target_label_path (str, optional): Path to the segmentation of the fixed image.
             registration_name (int or str, optional): Name identifier for the registration process.
+
         """
         self.results_dir = "results"
         self.parameters_dir = "parameters"
@@ -113,7 +116,11 @@ class Registration():
         transformix_object = itk.TransformixFilter.New(moving_image_transformix)
         transformix_object.SetTransformParameterObject(self.result_transform_parameters)
         transformix_object.UpdateLargestPossibleRegion()
+        
+        
+        # Save results
 
+        # Save results
         self.atlas_label_deformed_image = transformix_object.GetOutput()
         
         # Make sure output label is binary
@@ -189,8 +196,32 @@ class MultiRegistrationFusion:
         else:
             self.validation_results = validation_results
         self.plot = plot
+    
+    def calculate_nmi(self, target_array, atlas_array):
+        return normalized_mutual_info_score(target_array, atlas_array, average_method='arithmetic')
 
-    def perform_multi_atlas_registration(self, target_index, nr_atlas_registrations=4, validate=True):
+    def select_images_with_lowest_nmi(self, atlas_index, target_index, nr_atlas_registrations):
+        #atlas_indexes = [idx for idx in range(atlas_index) if idx != target_index]
+
+        # Calculate NMI scores for each pair of target and atlas images
+        nmi_scores = []
+        for atlas_idx in atlas_index:
+            target_image = itk.imread(self.dataset.data_paths[target_index][0], itk.F)
+            atlas_image = itk.imread(self.dataset.data_paths[atlas_idx][0], itk.F)
+            # Convert images to arrays, this datatype is required to calculate the NMI scores
+            target_array = itk.array_from_image(target_image).flatten()
+            atlas_array = itk.array_from_image(atlas_image).flatten()
+            nmi = self.calculate_nmi(target_array, atlas_array)
+            #List of tuples containing the atlas index and the obtained NMI score for
+            nmi_scores.append((atlas_idx, nmi))
+
+        # Sort by NMI scores and select the first nr_atlas_registrations indices, corresponding to the highest NMI scores
+        sorted_nmi_scores = sorted(nmi_scores, key=lambda x: x[1], reverse=True)
+        selected_atlas_indices = [idx for idx, _ in sorted_nmi_scores[:nr_atlas_registrations]]
+    
+        return selected_atlas_indices
+
+    def perform_multi_atlas_registration(self, target_index, nr_atlas_registrations=4, validate=True): #validate=True
         """Perform multi-atlas registration for a specific target image.
         1) Perform registration of N random moving (atlas) images onto one selected target image
         2) Save the deformed labels and optionally validate with the ground truth
@@ -202,15 +233,17 @@ class MultiRegistrationFusion:
             validate (bool, optional): turn off validation mode if code is in testing or deployment mode or 
                 no ground truth available.
         """
-        # Select N random atlas images to register onto target image
-        atlas_indexes = random.sample(
-            [idx for idx in range(len(self.dataset.data_paths)) if idx != target_index], nr_atlas_registrations)
+
+        # Select N atlas images to register onto target image based on NMI score
+        atlas_full_list = [idx for idx in range(len(self.dataset.data_paths)) if idx != target_index]
+        atlas_indexes = self.select_images_with_lowest_nmi(atlas_full_list, target_index, nr_atlas_registrations)
 
         #List that will contain all the deformed labels to fuse        
         labels_to_fuse = []
 
         # Perform registration for each randomly selected atlas image
         for atlas_index in atlas_indexes:
+
             registration_name = f"{self.parameter_file[:-4]}_T{target_index}_A{atlas_index}"
             
             registration = Registration(atlas_image_path=self.dataset.data_paths[atlas_index][0],
