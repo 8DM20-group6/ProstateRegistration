@@ -7,6 +7,7 @@ import elastix
 import os
 from LabelFusion.wrapper import fuse_images
 from skimage.metrics import normalized_mutual_information
+import seg_metrics.seg_metrics as sg
 
 class Registration():
     """
@@ -270,10 +271,12 @@ class MultiRegistrationFusion:
             
             if validate:
                 print("Validating performance of atlas label")
-                dice = calculate_dsc(label1_path=registration.atlas_label_deformed_path,
+                dice, hd_value, hd95_value,recall_value,fpr_value,fnr_value = calculate_dsc(label1_path=registration.atlas_label_deformed_path,
                                     label2_path=registration.target_label_path, plot=self.plot)
+                
+
                 results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method,
-                          "target_index": target_index, "atlas_index": atlas_index, "dice": dice}])
+                          "target_index": target_index, "atlas_index": atlas_index, "dice": dice  ,"hd":hd_value, "hd95": hd95_value, "recall": recall_value, "fpr": fpr_value, "fnr": fnr_value}])
                 self.validation_results = pd.concat([self.validation_results, results], ignore_index=True)
             
             # Read the deformed labels one by one and store them in a list
@@ -313,10 +316,11 @@ class MultiRegistrationFusion:
         
         if validate:
             print("Validating performance of fused atlas label")
-            fused_dice = calculate_dsc(label1_path=fused_atlas_label_path,
+            fused_dice, hd_value, hd95_value,recall_value,fpr_value,fnr_value = calculate_dsc(label1_path=fused_atlas_label_path,
                                        label2_path=registration.target_label_path, plot=self.plot)
             results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method,
-                      "target_index": target_index, "atlas_index": "fused_atlas", "dice": fused_dice}])
+                      "target_index": target_index, "atlas_index": "fused_atlas", "dice": fused_dice, "hd":hd_value, "hd95": hd95_value, "recall": recall_value, "fpr": fpr_value, "fnr": fnr_value}])
+            
             self.validation_results = pd.concat([self.validation_results, results], ignore_index=True)
             return fused_atlas_label_path, self.validation_results
         
@@ -381,12 +385,34 @@ def calculate_dsc(label1_path, label2_path, plot=False):
     label1_img = img_from_path(label1_path)
     label2_img = img_from_path(label2_path)
     
-    overlap = np.multiply(label1_img, label2_img)
-    dice = (2 * np.sum(overlap)) / (np.sum(label1_img) + np.sum(label2_img))
-    print(f'The Dice score is {dice}')
-    
+    # overlap = np.multiply(label1_img, label2_img)
+    # dice = (2 * np.sum(overlap)) / (np.sum(label1_img) + np.sum(label2_img))
+    # print(f'The Dice score is {dice}')
+
     if plot:
         plot_dice(label1_img, label2_img)
+    
+    #Other metrics
+    metrics_2 = sg.write_metrics(labels=[0,1],
+                                    gdth_img=label1_img,
+                                    pred_img=label2_img,
+                                    TPTNFPFN=False,
+                                    spacing=[0.488281, 0.488281, 1],
+                                    metrics=['hd', 'hd95','dice','recall','fpr','fnr'])
+    metrics_dict = metrics_2[0]
+
+    dice_value = metrics_dict['dice']
+    dice_value=dice_value[1]
+    hd_value=metrics_dict['hd']
+    hd_value = hd_value[1]
+    hd95_value=metrics_dict['hd95']
+    hd95_value=hd95_value[1]
+    recall_value=metrics_dict['recall']
+    recall_value=recall_value[1]
+    fpr_value=metrics_dict['fpr']
+    fpr_value=fpr_value[1]
+    fnr_value=metrics_dict['fnr']
+    fnr_value=fnr_value[1]
         
-    return dice
+    return dice_value, hd_value, hd95_value,recall_value,fpr_value,fnr_value
 
