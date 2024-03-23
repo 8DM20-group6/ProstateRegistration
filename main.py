@@ -85,10 +85,9 @@ def test_registration(parameter_index=1, plot=True):
 
 
 # %%%%%%%%%%%%%% Multi-atlas registration %%%%%%%%%%%%%%%
-# Goal: determine best fusion method
-# TODO: implement similarity metric for atlas selection (for every target, select 3 or 5 atlas images based on similarity)
+# Goal: determine best fusion method and nr_atlas_registrations
 parameter_file = ["Par0001translation.txt", "Par0001bspline64.txt"]  # To be determined
-fusion_methods = ["staple", "majorityvoting", "itkvoting", "SIMPLE"]
+fusion_methods = ["STAPLE", "majorityvoting", "itkvoting", "SIMPLE"]
 
 def test_multi_registration(fusion_index=0):
     """Function to test multi-atlas registration functionality"""
@@ -98,26 +97,7 @@ def test_multi_registration(fusion_index=0):
         dataset=dataset, parameter_file=parameter_file, fusion_method=fusion_methods[fusion_index])
     fused_atlas_label_path, results = multi_registration_fusion.perform_multi_atlas_registration(target_index=2, nr_atlas_registrations=2)
 
-    # Perform multi-atlas registration on ONE target image with ALL parameter files 
-    # for parameter_file in parameter_files[1:]:
-    #     print(parameter_file)
-    #     multi_registration_fusion = MultiRegistrationFusion(
-    #         dataset=dataset, parameter_file=parameter_file, fusion_method=fusion_methods[0], validation_results=results)
-    #     fused_atlas_label_path, results = multi_registration_fusion.perform_multi_atlas_registration(target_index=3, nr_atlas_registrations=3)
-        
-    # # Perform multi-atlas registration on ALL target image
-    # multi_registration_fusion = MultiRegistrationFusion(
-    #     dataset=dataset, parameter_file=parameter_files[0], fusion_method=fusion_methods[0])
-    # results = multi_registration_fusion.full_multi_atlas_registration(nr_atlas_registrations=3)
-
-    # # Perform multi-atlas registration on ALL target images with ALL parameter files
-    # results = pd.DataFrame(columns=["parameter_file", "fusion_method", "target_index", "atlas_index", "dice"])
-
-    # for parameter_file in parameter_files:
-    #     multi_registration_fusion = MultiRegistrationFusion(dataset, parameter_file, 
-    #                                                         fusion_method=fusion_methods[0], results=results)
-    #     results = multi_registration_fusion.full_multi_atlas_registration(nr_atlas_registrations=3)
-    
+    return results
 
 results = test_multi_registration(fusion_index=3)
 print(results)
