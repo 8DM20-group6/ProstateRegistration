@@ -83,26 +83,19 @@ def test_registration(parameter_index=1, plot=True):
 
 # results = test_registration(parameter_index=0)
 
-#%%%%%%%%%%%%%% Multi-atlas registration %%%%%%%%%%%%%%%
-parameter_files = [
-    "Par0001rigid.txt",
-    "Par0001affine.txt",
-    "Par0043rigid.txt",
-    "Par0055.txt",
-    ["Par0001translation.txt", "Par0001bspline64.txt", "Par0001bspline32.txt",
-     "Par0001bspline16.txt", "Par0001bspline08.txt"],
-    ["Par0001translation.txt", "Par0001bspline64.txt"],
-    ["Par0001translation.txt", "Par0001bspline16.txt"],
-    ["Par0001translation.txt", "Par0001bspline4.txt"]
-]
+
+# %%%%%%%%%%%%%% Multi-atlas registration %%%%%%%%%%%%%%%
+# Goal: determine best fusion method
+# TODO: implement similarity metric for atlas selection (for every target, select 3 or 5 atlas images based on similarity)
+parameter_file = ["Par0001translation.txt", "Par0001bspline64.txt"]  # To be determined
 fusion_methods = ["staple", "majorityvoting", "itkvoting", "SIMPLE"]
 
-def test_multi_registration(parameter_index=0, fusion_index=0):
+def test_multi_registration(fusion_index=0):
     """Function to test multi-atlas registration functionality"""
 
     # Perform multi-atlas registration on ONE target image
     multi_registration_fusion = MultiRegistrationFusion(
-        dataset=dataset, parameter_file=parameter_files[0], fusion_method=fusion_methods[0])
+        dataset=dataset, parameter_file=parameter_file, fusion_method=fusion_methods[fusion_index])
     fused_atlas_label_path, results = multi_registration_fusion.perform_multi_atlas_registration(target_index=2, nr_atlas_registrations=2)
 
     # Perform multi-atlas registration on ONE target image with ALL parameter files 
@@ -126,5 +119,5 @@ def test_multi_registration(parameter_index=0, fusion_index=0):
     #     results = multi_registration_fusion.full_multi_atlas_registration(nr_atlas_registrations=3)
     
 
-test_multi_registration(parameter_index=0, fusion_index=1)
-
+results = test_multi_registration(fusion_index=3)
+print(results)
