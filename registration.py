@@ -5,8 +5,8 @@ import pandas as pd
 import itk
 import elastix
 import os
-import random
 from LabelFusion.wrapper import fuse_images
+from skimage.metrics import normalized_mutual_information
 
 class Registration():
     """
@@ -21,6 +21,7 @@ class Registration():
             parameter_file (str): Name of the parameter file for registration.
             target_label_path (str, optional): Path to the segmentation of the fixed image.
             registration_name (int or str, optional): Name identifier for the registration process.
+
         """
         self.results_dir = "results"
         self.parameters_dir = "parameters"
@@ -113,7 +114,11 @@ class Registration():
         transformix_object = itk.TransformixFilter.New(moving_image_transformix)
         transformix_object.SetTransformParameterObject(self.result_transform_parameters)
         transformix_object.UpdateLargestPossibleRegion()
+        
+        
+        # Save results
 
+        # Save results
         self.atlas_label_deformed_image = transformix_object.GetOutput()
         
         # Make sure output label is binary
@@ -189,8 +194,47 @@ class MultiRegistrationFusion:
         else:
             self.validation_results = validation_results
         self.plot = plot
+    
+    
+    def calculate_nmi(self, target_array, atlas_array):
+        """Compute Normalized mutual information score from two arrays"""
+        return normalized_mutual_information(target_array, atlas_array)
 
-    def perform_multi_atlas_registration(self, target_index, nr_atlas_registrations=4, validate=True):
+
+    def atlas_selection(self, atlas_indexes, target_index, nr_atlas_registrations):
+        """
+        Selects a specified number of atlas indices based on the normalized mutual information (NMI) scores
+        between the target image and each atlas image.
+
+        Parameters:
+            atlas_indexes (list): A list of atlas indices.
+            target_index (int): The index of the target image.
+            nr_atlas_registrations (int): The number of atlas registrations to select.
+
+        Returns:
+            list: A list of selected atlas indices.
+
+        """
+
+        # Calculate NMI scores for each pair of target and atlas images
+        nmi_scores = []
+        for atlas_index in atlas_indexes:
+            target_image = itk.imread(self.dataset.data_paths[target_index][0], itk.F)
+            atlas_image = itk.imread(self.dataset.data_paths[atlas_index][0], itk.F)
+            # Convert images to arrays, this datatype is required to calculate the NMI scores
+            target_array = itk.array_from_image(target_image)
+            atlas_array = itk.array_from_image(atlas_image)
+            nmi = self.calculate_nmi(target_array, atlas_array)
+            #List of tuples containing the atlas index and the obtained NMI score for
+            nmi_scores.append((atlas_index, nmi))
+        
+        # Sort by NMI scores and select the first nr_atlas_registrations indices, corresponding to the highest NMI scores
+        sorted_nmi_scores = sorted(nmi_scores, key=lambda x: x[1], reverse=True)
+        selected_atlas_indices = [idx for idx, _ in sorted_nmi_scores[:nr_atlas_registrations]]
+    
+        return selected_atlas_indices
+
+    def perform_multi_atlas_registration(self, target_index, nr_atlas_registrations=4, validate=True): #validate=True
         """Perform multi-atlas registration for a specific target image.
         1) Perform registration of N random moving (atlas) images onto one selected target image
         2) Save the deformed labels and optionally validate with the ground truth
@@ -202,15 +246,17 @@ class MultiRegistrationFusion:
             validate (bool, optional): turn off validation mode if code is in testing or deployment mode or 
                 no ground truth available.
         """
-        # Select N random atlas images to register onto target image
-        atlas_indexes = random.sample(
-            [idx for idx in range(len(self.dataset.data_paths)) if idx != target_index], nr_atlas_registrations)
+
+        # Select N atlas images to register onto target image based on NMI score
+        atlas_indexes_full = [idx for idx in range(len(self.dataset.data_paths)) if idx != target_index]
+        atlas_indexes = self.atlas_selection(atlas_indexes_full, target_index, nr_atlas_registrations)
 
         #List that will contain all the deformed labels to fuse        
         labels_to_fuse = []
 
         # Perform registration for each randomly selected atlas image
         for atlas_index in atlas_indexes:
+
             registration_name = f"{self.parameter_file[:-4]}_T{target_index}_A{atlas_index}"
             
             registration = Registration(atlas_image_path=self.dataset.data_paths[atlas_index][0],
@@ -250,21 +296,17 @@ class MultiRegistrationFusion:
         fig, axes = plt.subplots(1, len(labels_to_fuse) + 2, figsize=(15, 5))
         for i, label in enumerate(labels_to_fuse):
             axes[i].imshow(sitk.GetArrayFromImage(label[:, :, 40]), cmap='Reds', vmin=0, vmax=1)
-            axes[i].contour(sitk.GetArrayFromImage(
-                label[:, :, 40]), colors='black', linewidths=0.5)
+            axes[i].contour(sitk.GetArrayFromImage(label[:, :, 40]), colors='black', linewidths=0.5)
             axes[-1].imshow(sitk.GetArrayFromImage(label[:, :, 40]), cmap='Reds', vmin=0, vmax=1.5, alpha=0.6)
-            axes[-1].contour(sitk.GetArrayFromImage(label[:, :, 40]),
-                             colors='black', linewidths=0.5)
+            axes[-1].contour(sitk.GetArrayFromImage(label[:, :, 40]), colors='black', linewidths=0.5)
             axes[i].set_title(f"Label {i+1}")
             axes[i].axis('off')
         axes[-2].imshow(sitk.GetArrayFromImage(fused_result[:, :, 40]), cmap='Blues', vmin=0, vmax=1)
-        axes[-2].contour(sitk.GetArrayFromImage(fused_result[:,
-                         :, 40]), colors='black', linewidths=0.5)
+        axes[-2].contour(sitk.GetArrayFromImage(fused_result[:, :, 40]), colors='black', linewidths=0.5)
         axes[-2].set_title("Fused Label")
         axes[-2].axis('off')
         axes[-1].imshow(sitk.GetArrayFromImage(fused_result[:, :, 40]), cmap='Blues', vmin=0, vmax=1.5, alpha=0.8)
-        axes[-1].contour(sitk.GetArrayFromImage(fused_result[:,
-                         :, 40]), colors='black', linewidths=0.5)
+        axes[-1].contour(sitk.GetArrayFromImage(fused_result[:, :, 40]), colors='black', linewidths=0.5)
         axes[-1].set_title("Combination plot")
         axes[-1].axis('off')
         plt.show()
