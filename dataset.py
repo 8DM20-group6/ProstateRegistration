@@ -15,12 +15,9 @@ import os
 import glob
 
 class Dataset():
-    def __init__(self, n_validation=3):
-        self.dir = "data"
+    def __init__(self, dirname):
+        self.dir = dirname
         self.data_paths = self.get_data_paths()
-        self.data_paths_optimize = self.get_data_paths()[:-n_validation]
-        self.data_paths_validate = self.get_data_paths()[-n_validation:]
-        # TODO add random component to selecting validation samples
 
     def get_data_paths(self):
         """
@@ -41,6 +38,7 @@ class Dataset():
     
     def __len__(self):
         return len(self.data_paths)
+    
     
     def __getitem__(self, index):
         """Returns array data from image and mask for a given index.
