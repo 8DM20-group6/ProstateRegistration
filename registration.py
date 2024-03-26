@@ -96,7 +96,7 @@ class Registration():
         ax[1, 1].imshow(overlay_from_segmentation(img_from_path(
             self.target_label_path)[40, :, :]), cmap="spring", alpha=0.6)
         fig.suptitle("Atlas registration results")
-        plt.tight_layout()
+        plt.tight_layout(w_pad=-20)
         plt.show()
 
     # Elastix functions    
@@ -179,37 +179,32 @@ class Registration():
 
 class MultiRegistrationFusion:
     """A class for performing multi-atlas registration and fusion of medical images."""
-    def __init__(self, dataset, parameter_file, fusion_method="MajorityVoting", validation_results=None, plot=True):
+
+    def __init__(self, data_atlas_paths, data_target_path, parameter_file, fusion_method="MajorityVoting", validation_results=None, plot=True):
         """Initialize the MultiRegistrationFusion object.
 
-        Args:
-            dataset: The dataset containing image paths.
+        Parameters:
+            data_atlas_paths: The data_atlas_paths containing image paths.
             parameter_file (str): Name of the parameter file for registration.
             fusion_method (str, optional): Fusion method for combining labels. Defaults to "MajorityVoting".
         """
-        self.dataset = dataset
+        self.data_atlas_paths = data_atlas_paths
+        self.data_target_path = data_target_path
         self.parameter_file = parameter_file
         self.fusion_method = fusion_method  # STAPLE, MayorityVoting, ITKVoting, SIMPLE
         if validation_results is None:
-            self.validation_results = pd.DataFrame(columns=["parameter_file", "fusion_method", "target_index", "atlas_index", "dice"])
+            self.validation_results = pd.DataFrame()
         else:
             self.validation_results = validation_results
         self.plot = plot
-    
-    
-    def calculate_nmi(self, target_array, atlas_array):
-        """Compute Normalized mutual information score from two arrays"""
-        return normalized_mutual_information(target_array, atlas_array)
 
-
-    def atlas_selection(self, atlas_indexes, target_index, nr_atlas_registrations):
+    def atlas_selection(self, atlas_indexes, nr_atlas_registrations):
         """
         Selects a specified number of atlas indices based on the normalized mutual information (NMI) scores
         between the target image and each atlas image.
 
         Parameters:
             atlas_indexes (list): A list of atlas indices.
-            target_index (int): The index of the target image.
             nr_atlas_registrations (int): The number of atlas registrations to select.
 
         Returns:
@@ -220,12 +215,12 @@ class MultiRegistrationFusion:
         # Calculate NMI scores for each pair of target and atlas images
         nmi_scores = []
         for atlas_index in atlas_indexes:
-            target_image = itk.imread(self.dataset.data_paths[target_index][0], itk.F)
-            atlas_image = itk.imread(self.dataset.data_paths[atlas_index][0], itk.F)
+            target_image = itk.imread(self.data_target_path[0], itk.F)
+            atlas_image = itk.imread(self.data_atlas_paths[atlas_index][0], itk.F)
             # Convert images to arrays, this datatype is required to calculate the NMI scores
             target_array = itk.array_from_image(target_image)
             atlas_array = itk.array_from_image(atlas_image)
-            nmi = self.calculate_nmi(target_array, atlas_array)
+            nmi = calculate_nmi(target_array, atlas_array)
             #List of tuples containing the atlas index and the obtained NMI score for
             nmi_scores.append((atlas_index, nmi))
         
@@ -235,67 +230,85 @@ class MultiRegistrationFusion:
     
         return selected_atlas_indices
 
-    def perform_multi_atlas_registration(self, target_index, nr_atlas_registrations=4, validate=True): #validate=True
+    def perform_multi_atlas_registration(self, nr_atlas_registrations=4, validate=True): #validate=True
         """Perform multi-atlas registration for a specific target image.
         1) Perform registration of N random moving (atlas) images onto one selected target image
         2) Save the deformed labels and optionally validate with the ground truth
         3) Fuse the deformed labels into one atlas label which is the predicted label for that target image
 
         Args:
-            target_index (int): Index of the target image in the dataset.
             nr_atlas_registrations (int, optional): Number of atlas registrations to perform. Defaults to 4.
             validate (bool, optional): turn off validation mode if code is in testing or deployment mode or 
                 no ground truth available.
         """
 
         # Select N atlas images to register onto target image based on NMI score
-        atlas_indexes_full = [idx for idx in range(len(self.dataset.data_paths)) if idx != target_index]
-        atlas_indexes = self.atlas_selection(atlas_indexes_full, target_index, nr_atlas_registrations)
+        atlas_indexes_full = list(range(len(self.data_atlas_paths)))
+        atlas_indexes = self.atlas_selection(atlas_indexes_full, nr_atlas_registrations)
 
         #List that will contain all the deformed labels to fuse        
         labels_to_fuse = []
+        target_name = self.data_target_path[0].split("\\")[-2]
 
         # Perform registration for each randomly selected atlas image
         for atlas_index in atlas_indexes:
-
-            registration_name = f"{self.parameter_file[:-4]}_T{target_index}_A{atlas_index}"
+            atlas_name = self.data_atlas_paths[atlas_index][0].split("\\")[-2]
+            registration_name = f"Target-{target_name}_Atlas-{atlas_name}"
             
-            registration = Registration(atlas_image_path=self.dataset.data_paths[atlas_index][0],
-                                            atlas_label_path=self.dataset.data_paths[atlas_index][1],
-                                            target_image_path=self.dataset.data_paths[target_index][0],
-                                            target_label_path=self.dataset.data_paths[target_index][1],
+            registration = Registration(atlas_image_path=self.data_atlas_paths[atlas_index][0],
+                                            atlas_label_path=self.data_atlas_paths[atlas_index][1],
+                                            target_image_path=self.data_target_path[0],
+                                            target_label_path=self.data_target_path[1],
                                             registration_name=registration_name,
                                             parameter_file=self.parameter_file)
             
             registration.perform_registration(plot=self.plot)
             
             if validate:
-                print("Validating performance of atlas label")
-                dice, hd_value, hd95_value,recall_value,fpr_value,fnr_value = calculate_dsc(label1_path=registration.atlas_label_deformed_path,
+                print(f"Computing metrics for atlas label {atlas_name} with target label {target_name}")
+                dice, hd, hd95, recall, fpr, fnr = compute_metrics(label1_path=registration.atlas_label_deformed_path,
                                     label2_path=registration.target_label_path, plot=self.plot)
                 
-
-                results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method,
-                          "target_index": target_index, "atlas_index": atlas_index, "dice": dice  ,"hd":hd_value, "hd95": hd95_value, "recall": recall_value, "fpr": fpr_value, "fnr": fnr_value}])
+                results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method, 
+                                         "target": target_name, "atlas": atlas_name,
+                                         "dice": dice, "hd": hd, "hd95": hd95, "recall": recall, 
+                                         "fpr": fpr, "fnr": fnr}])
+                
                 self.validation_results = pd.concat([self.validation_results, results], ignore_index=True)
             
             # Read the deformed labels one by one and store them in a list
             registered_label_image = sitk.ReadImage(registration.atlas_label_deformed_path, sitk.sitkUInt8)
             labels_to_fuse.append(registered_label_image)
-
-        # Perform label fusion using the fused_simple strategy (modify as needed: STAPLE, MayorityVoting, ITKVoting, SIMPLE)
+        
+        # Label fusion using the fused_simple strategy (methods: STAPLE, MayorityVoting, ITKVoting, SIMPLE)
         if self.fusion_method == "SIMPLE":
-            fused_result = fuse_images(
-                labels_to_fuse, method=self.fusion_method, class_list=[0, 1])
+            fused_result = fuse_images(labels_to_fuse, method=self.fusion_method, class_list=[0, 1])
         else:
-            fused_result = fuse_images(
-                labels_to_fuse, method=self.fusion_method)
+            fused_result = fuse_images(labels_to_fuse, method=self.fusion_method)
 
         # Write the fused result to output file
-        fused_atlas_label_path = f"results/{self.parameter_file[:-4]}_T{target_index}_FusedLabel.mhd"
+        fused_atlas_label_path = f"results/Target-{target_name}_FusedLabel.mhd"
         sitk.WriteImage(fused_result, fused_atlas_label_path)
 
         # Plot individual labels and fused label
+        if (self.plot==True) or (self.plot=="final"):
+            self.plot_fusion(labels_to_fuse, fused_result)
+        
+        if validate:
+            print(f"Computing metrics for the fused atlas label with target label {target_name}")
+            fused_dice, hd, hd95, recall, fpr, fnr = compute_metrics(label1_path=fused_atlas_label_path,
+                                       label2_path=registration.target_label_path, plot=self.plot)
+            
+            results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method, "NrOfAtlases": nr_atlas_registrations,
+                                     "target": target_name, "atlas": "fused_atlas", "dice": fused_dice,
+                      "hd":hd, "hd95": hd95, "recall": recall, "fpr": fpr, "fnr": fnr}])
+            
+            self.validation_results = pd.concat([self.validation_results, results], ignore_index=True)
+
+        return fused_atlas_label_path
+    
+    def plot_fusion(self, labels_to_fuse, fused_result):
+        """Plots of seperate and fused altas labels"""
         fig, axes = plt.subplots(1, len(labels_to_fuse) + 2, figsize=(15, 5))
         for i, label in enumerate(labels_to_fuse):
             axes[i].imshow(sitk.GetArrayFromImage(label[:, :, 40]), cmap='Reds', vmin=0, vmax=1)
@@ -314,24 +327,6 @@ class MultiRegistrationFusion:
         axes[-1].axis('off')
         plt.show()
         
-        if validate:
-            print("Validating performance of fused atlas label")
-            fused_dice, hd_value, hd95_value,recall_value,fpr_value,fnr_value = calculate_dsc(label1_path=fused_atlas_label_path,
-                                       label2_path=registration.target_label_path, plot=self.plot)
-            results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method,
-                      "target_index": target_index, "atlas_index": "fused_atlas", "dice": fused_dice, "hd":hd_value, "hd95": hd95_value, "recall": recall_value, "fpr": fpr_value, "fnr": fnr_value}])
-            
-            self.validation_results = pd.concat([self.validation_results, results], ignore_index=True)
-            return fused_atlas_label_path, self.validation_results
-        
-        else:
-            return fused_atlas_label_path
-
-    def full_multi_atlas_registration(self, nr_atlas_registrations=4, validate=True):
-        """Perform multi-atlas registration for all target images in the dataset."""
-        for target_index in range(len(self.dataset.data_paths)):
-            _ = self.perform_multi_atlas_registration(nr_atlas_registrations, target_index, validate)
-        return self.validation_results
 
 # TODO could move these functions to a utils file
 def img_from_path(img_path):
@@ -340,29 +335,27 @@ def img_from_path(img_path):
 def overlay_from_segmentation(img_segmentation):
     return np.ma.masked_where(img_segmentation == 0, img_segmentation)
     
-# Validation
-def plot_dice(label1_img, label2_img, target_img_path=None, pixel_cutoff=50):
+def plot_dice(label1_img, label2_img, pixel_cutoff=50):
     """Plot the overlap between two labels along with their individual regions.
     
     Args:
         label1_img (ndarray): First label/segmentation image.
         label2_img (ndarray): Second label/segmentation image.
     """
-    # Plotting
     fig, ax = plt.subplots(1, 3, figsize=(12, 4))
 
     ax[0].imshow(label1_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
                   cmap='Reds', vmin=0, vmax=1)
     ax[0].contour(label1_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
                    colors='black', linewidths=0.5)
-    ax[0].set_title("Segmentation 1")
+    ax[0].set_title("Deformed atlas label")
     ax[0].axis('off')
 
     ax[1].imshow(label2_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
                   cmap='Blues', vmin=0, vmax=1)
     ax[1].contour(label2_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
                    colors='black', linewidths=0.5)
-    ax[1].set_title("Segmentation 2")
+    ax[1].set_title("Target label")
     ax[1].axis('off')
 
     ax[2].imshow(label1_img[40, pixel_cutoff:-pixel_cutoff, pixel_cutoff:-pixel_cutoff],
@@ -377,42 +370,35 @@ def plot_dice(label1_img, label2_img, target_img_path=None, pixel_cutoff=50):
     ax[2].axis('off')
     ax[2].set_facecolor('white')
 
-    plt.tight_layout()
+    plt.tight_layout(w_pad=-20)
     plt.show()
 
-
-def calculate_dsc(label1_path, label2_path, plot=False):
+def compute_metrics(label1_path, label2_path, plot=False):
+    """From two images, compute dice, hd, hd95, recall, fpr, fnr"""
     label1_img = img_from_path(label1_path)
     label2_img = img_from_path(label2_path)
     
-    # overlap = np.multiply(label1_img, label2_img)
-    # dice = (2 * np.sum(overlap)) / (np.sum(label1_img) + np.sum(label2_img))
-    # print(f'The Dice score is {dice}')
-
     if plot:
         plot_dice(label1_img, label2_img)
     
-    #Other metrics
-    metrics_2 = sg.write_metrics(labels=[0,1],
-                                    gdth_img=label1_img,
-                                    pred_img=label2_img,
-                                    TPTNFPFN=False,
-                                    spacing=[0.488281, 0.488281, 1],
-                                    metrics=['hd', 'hd95','dice','recall','fpr','fnr'])
-    metrics_dict = metrics_2[0]
+    # Compute metrics with seg_metrics library
+    metrics = sg.write_metrics(labels=[0,1],
+                                gdth_img=label1_img,
+                                pred_img=label2_img,
+                                TPTNFPFN=False,
+                                spacing=[0.488281, 0.488281, 1],
+                                metrics=['hd', 'hd95','dice','recall','fpr','fnr'])
+    metrics_dict = metrics[0]
 
-    dice_value = metrics_dict['dice']
-    dice_value=dice_value[1]
-    hd_value=metrics_dict['hd']
-    hd_value = hd_value[1]
-    hd95_value=metrics_dict['hd95']
-    hd95_value=hd95_value[1]
-    recall_value=metrics_dict['recall']
-    recall_value=recall_value[1]
-    fpr_value=metrics_dict['fpr']
-    fpr_value=fpr_value[1]
-    fnr_value=metrics_dict['fnr']
-    fnr_value=fnr_value[1]
+    dice = metrics_dict['dice'][1]
+    hd=metrics_dict['hd'][1]
+    hd95 = metrics_dict['hd95'][1]
+    recall = metrics_dict['recall'][1]
+    fpr = metrics_dict['fpr'][1]
+    fnr = metrics_dict['fnr'][1]
         
-    return dice_value, hd_value, hd95_value,recall_value,fpr_value,fnr_value
+    return dice, hd, hd95, recall, fpr, fnr
 
+def calculate_nmi(target_array, atlas_array):
+    """Compute Normalized mutual information score from two arrays"""
+    return normalized_mutual_information(target_array, atlas_array)
