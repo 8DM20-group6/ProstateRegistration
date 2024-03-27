@@ -27,8 +27,12 @@ def registration_experiment(data_paths, parameter_files, experiment_name, n_atla
     for parameter_file in parameter_files:
         for target_index in range(len(data_paths)):
             target_name = data_paths[target_index][0].split("\\")[-2]
+            
+            atlas_indexes = [idx for idx in range(len(data_paths)) if idx != target_index]
+            
+            
             # Atlas selection
-            atlas_indexes = atlas_indexes = random.sample([idx for idx in range(
+            atlas_indexes = random.sample([idx for idx in range(
                 len(data_paths)) if idx != target_index], n_atlas_registrations)
             for atlas_index in atlas_indexes:
                 atlas_name = data_paths[atlas_index][0].split("\\")[-2]
@@ -52,7 +56,7 @@ def registration_experiment(data_paths, parameter_files, experiment_name, n_atla
 
             results = pd.concat([results_temp, results], ignore_index=True)
 
-    results.to_csv(f'OptimizationResults_{experiment_name}.csv', index=False)
+    results.to_csv(f'result_tables/OptimizationResults_{experiment_name}.csv', index=False)
     
     return results
 
@@ -61,26 +65,24 @@ def registration_experiment(data_paths, parameter_files, experiment_name, n_atla
 
 ########## Multi-atlas registration ##########
 # Goal: determine best fusion method and nr_atlas_registrations
-def fusion_experiment(data_paths, parameter_file, fusion_methods, nr_atlas_registrations):
+def fusion_experiment(data_paths, parameter_file, fusion_methods, max_atlases):
     """Function to experiment multi-atlas registration to determine optimal parameters"""
     results = pd.DataFrame()
-    for fusion_method in fusion_methods:
-        for nr_atlas_registration in nr_atlas_registrations:
-            for data_target_path in data_paths:
-                data_atlas_paths = [path for path in data_paths if path != data_target_path]
-                
-                multi_registration_fusion = MultiRegistrationFusion(data_atlas_paths=data_atlas_paths, 
-                                                                    data_target_path=data_target_path,
-                                                                    parameter_file=parameter_file,
-                                                                    fusion_method=fusion_method, plot="final")
-            
-                # Perform multi-atlas registration on ONE target image
-                fused_atlas_label_path = multi_registration_fusion.perform_multi_atlas_registration(
-                    nr_atlas_registrations=nr_atlas_registration)
-                
-                results = pd.concat([multi_registration_fusion.validation_results, results], ignore_index=True)
+
+    for data_target_path in data_paths:
+        data_atlas_paths = [path for path in data_paths if path != data_target_path]
+        
+        multi_registration_fusion = MultiRegistrationFusion(data_atlas_paths=data_atlas_paths, 
+                                                            data_target_path=data_target_path,
+                                                            parameter_file=parameter_file,
+                                                            fusion_method="STAPLE", plot=False)
     
-    results.to_csv(f"OptimizationResults_FusionMethods.csv", index=False)
+        results_taregt = multi_registration_fusion.fusion_experiment(
+            fusion_methods=fusion_methods, max_atlases=max_atlases)
+        
+        results = pd.concat([results_taregt, results], ignore_index=True)
+    
+    results.to_csv(f"result_tables/OptimizationResults_FusionMethods.csv", index=False)
             
     return results
 
@@ -106,7 +108,8 @@ def deploy_model(data_paths_target, data_paths_atlas, validate=False, fusion_met
             result_metrics = pd.concat([multi_registration_fusion.validation_results, result_metrics], ignore_index=True)
     
     if validate:    
-        result_metrics.to_csv(f"validation_results.csv", index=False)
+        result_metrics.to_csv(
+            f"result_tables/validation_results.csv", index=False)
         return result_metrics, result_paths
     
     return result_paths
@@ -114,7 +117,7 @@ def deploy_model(data_paths_target, data_paths_atlas, validate=False, fusion_met
 
 
 if __name__ == '__main__':
-    RUN = 0
+    RUN = 2
         
     #### Data selection ####
     dataset_optimize = Dataset(dirname="data/data_optimize")
@@ -149,14 +152,13 @@ if __name__ == '__main__':
     #### Multi-Atlas Regsitration Prameters #####
     if RUN==2:
         result_fusion = fusion_experiment(data_paths=dataset_optimize.data_paths,
-                                            parameter_file=["Par0001translation.txt", "Par0001bspline16.txt"],
-                                            fusion_methods=["STAPLE", "majorityvoting", "SIMPLE"], 
-                                            nr_atlas_registrations=[1, 2, 3, 4, 5, 6, 7, 8, 9])
+                                          parameter_file=["Par0001translation.txt", "Par0001bspline16.txt"],
+                                          fusion_methods=["itkvoting", "SIMPLE", "STAPLE"], max_atlases=11)
 
     #### Validation with known labels #####
     if RUN==3:
         result_val, result_paths_val = deploy_model(data_paths_target=dataset_validate.data_paths, data_paths_atlas=dataset_optimize.data_paths,
-                                            validate=True, fusion_method="SIMPLE", nr_atlas_registration=6, 
+                                                    validate=True, fusion_method="SIMPLE", nr_atlas_registration=6,
                                             parameter_file=["Par0001translation.txt", "Par0001bspline16.txt"])
     
     #### Model Deployment on unlabeled test data #####

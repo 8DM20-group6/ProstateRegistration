@@ -248,6 +248,7 @@ class MultiRegistrationFusion:
 
         #List that will contain all the deformed labels to fuse        
         labels_to_fuse = []
+        
         target_name = self.data_target_path[0].split("\\")[-2]
 
         # Perform registration for each randomly selected atlas image
@@ -326,6 +327,87 @@ class MultiRegistrationFusion:
         axes[-1].set_title("Combination plot")
         axes[-1].axis('off')
         plt.show()
+        
+    def fusion_experiment(self, fusion_methods=["STAPLE", "MayorityVoting", "SIMPLE"], max_atlases=11):
+        """Run experiment to determine fusion method and number of atlases used for best results
+        More efficient to run this code than the normal function for every setting"""
+        
+        # Select N atlas images to register onto target image based on NMI score
+        atlas_indexes_full = list(range(len(self.data_atlas_paths)))
+        atlas_indexes = self.atlas_selection(atlas_indexes_full, max_atlases)
+
+        # List that will contain all the deformed labels to fuse
+        labels_to_fuse = []
+        
+        target_name = self.data_target_path[0].split("\\")[-2]
+
+        # Perform registration for each randomly selected atlas image
+        for atlas_index in atlas_indexes:
+            atlas_name = self.data_atlas_paths[atlas_index][0].split("\\")[-2]
+            registration_name = f"Target-{target_name}_Atlas-{atlas_name}"
+
+            registration = Registration(atlas_image_path=self.data_atlas_paths[atlas_index][0],
+                                        atlas_label_path=self.data_atlas_paths[atlas_index][1],
+                                        target_image_path=self.data_target_path[0],
+                                        target_label_path=self.data_target_path[1],
+                                        registration_name=registration_name,
+                                        parameter_file=self.parameter_file)
+
+            registration.perform_registration(plot=self.plot)
+
+
+            print(
+                f"Computing metrics for deformed atlas label {atlas_name} with target label {target_name}")
+            dice, hd, hd95, recall, fpr, fnr = compute_metrics(label1_path=registration.atlas_label_deformed_path,
+                                                                label2_path=registration.target_label_path, plot=self.plot)
+
+            results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method,
+                                        "target": target_name, "atlas": atlas_name,
+                                        "dice": dice, "hd": hd, "hd95": hd95, "recall": recall,
+                                        "fpr": fpr, "fnr": fnr}])
+
+            self.validation_results = pd.concat(
+                [self.validation_results, results], ignore_index=True)
+
+            # Read the deformed labels one by one and store them in a list
+            registered_label_image = sitk.ReadImage(
+                registration.atlas_label_deformed_path, sitk.sitkUInt8)
+            labels_to_fuse.append(registered_label_image)
+
+        for fusion_method in fusion_methods:
+            for nr_atlases in range(1, max_atlases+1):
+                # if nr_atlases==1:
+                #     fused_result = labels_to_fuse[0]
+                # else:
+                # Label fusion using the fused_simple strategy (methods: STAPLE, MayorityVoting, ITKVoting, SIMPLE)
+                # if (fusion_method == "SIMPLE") or (fusion_method == "MayorityVoting"):
+                fused_result = fuse_images(
+                    labels_to_fuse, method=fusion_method, class_list=[0,1])
+                # else:
+                #     fused_result = fuse_images(labels_to_fuse[:nr_atlases], method=fusion_method)
+
+                # Write the fused result to output file
+                fused_atlas_label_path = f"results/Target-{target_name}_Fusion_{fusion_method}_NrOfAtlases_{nr_atlases}_FusedLabel.mhd"
+                sitk.WriteImage(fused_result, fused_atlas_label_path)
+
+                # Plot individual labels and fused label
+                if (self.plot == True) or (self.plot == "final"):
+                    self.plot_fusion(labels_to_fuse, fused_result)
+
+
+                print(
+                    f"Computing metrics for the fused atlas label with target label {target_name}")
+                fused_dice, hd, hd95, recall, fpr, fnr = compute_metrics(label1_path=fused_atlas_label_path,
+                                                                        label2_path=registration.target_label_path, plot=self.plot)
+
+                results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method, "NrOfAtlases": nr_atlases,
+                                        "target": target_name, "atlas": "fused_atlas", "dice": fused_dice,
+                                        "hd": hd, "hd95": hd95, "recall": recall, "fpr": fpr, "fnr": fnr}])
+
+                self.validation_results = pd.concat(
+                    [self.validation_results, results], ignore_index=True)
+
+        return self.validation_results
         
 
 # TODO could move these functions to a utils file
