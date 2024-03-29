@@ -220,7 +220,7 @@ class MultiRegistrationFusion:
             # Convert images to arrays, this datatype is required to calculate the NMI scores
             target_array = itk.array_from_image(target_image)
             atlas_array = itk.array_from_image(atlas_image)
-            nmi = calculate_nmi(target_array, atlas_array)
+            nmi = normalized_mutual_information(target_array, atlas_array)
             #List of tuples containing the atlas index and the obtained NMI score for
             nmi_scores.append((atlas_index, nmi))
         
@@ -328,7 +328,7 @@ class MultiRegistrationFusion:
         axes[-1].axis('off')
         plt.show()
         
-    def fusion_experiment(self, fusion_methods=["STAPLE", "MayorityVoting", "SIMPLE"], max_atlases=11):
+    def fusion_experiment(self, fusion_methods=["STAPLE", "MayorityVoting", "SIMPLE"], max_atlases=11, similar=["most", "least"]):
         """Run experiment to determine fusion method and number of atlases used for best results
         More efficient to run this code than the normal function for every setting"""
         
@@ -361,7 +361,7 @@ class MultiRegistrationFusion:
             dice, hd, hd95, recall, fpr, fnr = compute_metrics(label1_path=registration.atlas_label_deformed_path,
                                                                 label2_path=registration.target_label_path, plot=self.plot)
 
-            results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method,
+            results = pd.DataFrame([{"parameter_file": self.parameter_file,
                                         "target": target_name, "atlas": atlas_name,
                                         "dice": dice, "hd": hd, "hd95": hd95, "recall": recall,
                                         "fpr": fpr, "fnr": fnr}])
@@ -376,36 +376,38 @@ class MultiRegistrationFusion:
 
         for fusion_method in fusion_methods:
             for nr_atlases in range(1, max_atlases+1):
-                # if nr_atlases==1:
-                #     fused_result = labels_to_fuse[0]
-                # else:
-                # Label fusion using the fused_simple strategy (methods: STAPLE, MayorityVoting, ITKVoting, SIMPLE)
-                # if (fusion_method == "SIMPLE") or (fusion_method == "MayorityVoting"):
-                fused_result = fuse_images(
-                    labels_to_fuse, method=fusion_method, class_list=[0,1])
-                # else:
-                #     fused_result = fuse_images(labels_to_fuse[:nr_atlases], method=fusion_method)
+                for similarity in similar:
 
-                # Write the fused result to output file
-                fused_atlas_label_path = f"results/Target-{target_name}_Fusion_{fusion_method}_NrOfAtlases_{nr_atlases}_FusedLabel.mhd"
-                sitk.WriteImage(fused_result, fused_atlas_label_path)
+                    if similarity=="most":
+                        fused_result = fuse_images(
+                            labels_to_fuse[:nr_atlases], method=fusion_method, class_list=[0,1])
+                    elif similarity=="least":
+                        fused_result = fuse_images(
+                            labels_to_fuse[-nr_atlases:], method=fusion_method, class_list=[0, 1])
+                    # else:
+                    #     fused_result = fuse_images(labels_to_fuse[:nr_atlases], method=fusion_method)
 
-                # Plot individual labels and fused label
-                if (self.plot == True) or (self.plot == "final"):
-                    self.plot_fusion(labels_to_fuse, fused_result)
+                    # Write the fused result to output file
+                    fused_atlas_label_path = f"results/Target-{target_name}_Fusion_{fusion_method}_NrOfAtlases_{nr_atlases}_FusedLabel.mhd"
+                    sitk.WriteImage(fused_result, fused_atlas_label_path)
+
+                    # Plot individual labels and fused label
+                    if (self.plot == True) or (self.plot == "final"):
+                        self.plot_fusion(labels_to_fuse, fused_result)
 
 
-                print(
-                    f"Computing metrics for the fused atlas label with target label {target_name}")
-                fused_dice, hd, hd95, recall, fpr, fnr = compute_metrics(label1_path=fused_atlas_label_path,
-                                                                        label2_path=registration.target_label_path, plot=self.plot)
+                    print(
+                        f"Computing metrics for the fused atlas label with target label {target_name}")
+                    fused_dice, hd, hd95, recall, fpr, fnr = compute_metrics(label1_path=fused_atlas_label_path,
+                                                                            label2_path=registration.target_label_path, plot=self.plot)
 
-                results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": self.fusion_method, "NrOfAtlases": nr_atlases,
-                                        "target": target_name, "atlas": "fused_atlas", "dice": fused_dice,
-                                        "hd": hd, "hd95": hd95, "recall": recall, "fpr": fpr, "fnr": fnr}])
+                    results = pd.DataFrame([{"parameter_file": self.parameter_file, "fusion_method": fusion_method, "NrOfAtlases": nr_atlases,
+                                            "target": target_name, "atlas": "fused_atlas", "dice": fused_dice, "similarity": similarity,
+                                            "hd": hd, "hd95": hd95, "recall": recall, "fpr": fpr, "fnr": fnr}])
 
-                self.validation_results = pd.concat(
-                    [self.validation_results, results], ignore_index=True)
+                    self.validation_results = pd.concat(
+                        [self.validation_results, results], ignore_index=True)
+            
 
         return self.validation_results
         
@@ -481,6 +483,3 @@ def compute_metrics(label1_path, label2_path, plot=False):
         
     return dice, hd, hd95, recall, fpr, fnr
 
-def calculate_nmi(target_array, atlas_array):
-    """Compute Normalized mutual information score from two arrays"""
-    return normalized_mutual_information(target_array, atlas_array)

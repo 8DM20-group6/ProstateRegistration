@@ -1,4 +1,5 @@
 *.pyc
 __pycache__/
 results/*
-result_tables
+result_tables/DeepLearning_predictions_G6
+result_tables/Registration_Predictions_Group6
