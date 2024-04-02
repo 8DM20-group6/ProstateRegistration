@@ -198,7 +198,7 @@ class MultiRegistrationFusion:
             self.validation_results = validation_results
         self.plot = plot
 
-    def atlas_selection(self, atlas_indexes, nr_atlas_registrations):
+    def atlas_selection(self, atlas_indexes, nr_atlas_registrations, similar="most"):
         """
         Selects a specified number of atlas indices based on the normalized mutual information (NMI) scores
         between the target image and each atlas image.
@@ -226,11 +226,15 @@ class MultiRegistrationFusion:
         
         # Sort by NMI scores and select the first nr_atlas_registrations indices, corresponding to the highest NMI scores
         sorted_nmi_scores = sorted(nmi_scores, key=lambda x: x[1], reverse=True)
-        selected_atlas_indices = [idx for idx, _ in sorted_nmi_scores[:nr_atlas_registrations]]
+        if similar=="most":
+            selected_atlas_indices = [idx for idx, _ in sorted_nmi_scores[:nr_atlas_registrations]]
+        elif similar=="least":
+            selected_atlas_indices = [idx for idx, _ in sorted_nmi_scores[-nr_atlas_registrations:]]
+
     
         return selected_atlas_indices
 
-    def perform_multi_atlas_registration(self, nr_atlas_registrations=4, validate=True): #validate=True
+    def perform_multi_atlas_registration(self, nr_atlas_registrations=4, validate=True, similar="most"): #validate=True
         """Perform multi-atlas registration for a specific target image.
         1) Perform registration of N random moving (atlas) images onto one selected target image
         2) Save the deformed labels and optionally validate with the ground truth
@@ -244,7 +248,7 @@ class MultiRegistrationFusion:
 
         # Select N atlas images to register onto target image based on NMI score
         atlas_indexes_full = list(range(len(self.data_atlas_paths)))
-        atlas_indexes = self.atlas_selection(atlas_indexes_full, nr_atlas_registrations)
+        atlas_indexes = self.atlas_selection(atlas_indexes_full, nr_atlas_registrations, similar=similar)
 
         #List that will contain all the deformed labels to fuse        
         labels_to_fuse = []
@@ -282,10 +286,8 @@ class MultiRegistrationFusion:
             labels_to_fuse.append(registered_label_image)
         
         # Label fusion using the fused_simple strategy (methods: STAPLE, MayorityVoting, ITKVoting, SIMPLE)
-        if self.fusion_method == "SIMPLE":
-            fused_result = fuse_images(labels_to_fuse, method=self.fusion_method, class_list=[0, 1])
-        else:
-            fused_result = fuse_images(labels_to_fuse, method=self.fusion_method)
+        fused_result = fuse_images(labels_to_fuse, method=self.fusion_method, class_list=[0, 1])
+
 
         # Write the fused result to output file
         fused_atlas_label_path = f"results/Target-{target_name}_FusedLabel.mhd"

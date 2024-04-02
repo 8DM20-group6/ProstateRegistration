@@ -73,7 +73,7 @@ def registration_experiment(data_paths, parameter_files, experiment_name, plot=T
                     i += 1
                     
                     results = pd.concat([results_temp, results], ignore_index=True)
-                    results.to_csv(f'result_tables/OptimizationResults_{experiment_name}_notfinished.csv', index=False)
+                    # results.to_csv(f'result_tables/OptimizationResults_{experiment_name}_notfinished.csv', index=False)
         except:
             print(f"Error in registration with parameter file {parameter_file}")
             continue
@@ -109,7 +109,7 @@ def fusion_experiment(data_paths, parameter_file, fusion_methods, max_atlases, s
 # TODO: Also experiments where atlases are chosen at random?
 
 ########## Validate/Deploy model ##########
-def deploy_model(data_paths_target, data_paths_atlas, validate=False, fusion_method="SIMPLE", 
+def deploy_model(data_paths_target, data_paths_atlas, validate=False, fusion_method="SIMPLE", similar="most",
                  nr_atlas_registration=6, parameter_file=["Par0001translation.txt", "Par0001bspline16.txt"]):
     
     result_metrics = pd.DataFrame()
@@ -118,10 +118,10 @@ def deploy_model(data_paths_target, data_paths_atlas, validate=False, fusion_met
         multi_registration_fusion = MultiRegistrationFusion(data_atlas_paths=data_paths_atlas,
                                                             data_target_path=data_target_path,
                                                             parameter_file=parameter_file,
-                                                            fusion_method=fusion_method, plot=False)
+                                                            fusion_method=fusion_method, plot=True)
             
         fused_atlas_label_path = multi_registration_fusion.perform_multi_atlas_registration(
-            nr_atlas_registrations=nr_atlas_registration, validate=validate)
+            nr_atlas_registrations=nr_atlas_registration, validate=validate, similar=similar)
         
         result_paths.append(fused_atlas_label_path)
         if validate:
@@ -193,18 +193,9 @@ if __name__ == '__main__':
                                                             parameter_files=parameter_files_multistep,
                                                             experiment_name="multistep_parameters",
                                                             plot=False)
-    if RUN==2 :
-        parameter_files_multistep = [
-                                     ["Par0001translation.txt", "Par0001bspline64.txt", "Par0001bspline32.txt", "Par0001bspline16.txt", "Par0001bspline08.txt"],
-                                     ["Par0001translation_CC.txt", "Par0001bspline64.txt", "Par0001bspline32.txt", "Par0001bspline16_CC.txt", "Par0001bspline08.txt"],
-                                     ]
-        results_multistep_parameters = registration_experiment(data_paths=dataset_optimize.data_paths,
-                                                            parameter_files=parameter_files_multistep,
-                                                            experiment_name="complex_parameters",
-                                                            plot=True)
 
     #### Multi-Atlas Regsitration Prameters #####
-    if RUN==3:
+    if RUN==2:
         result_fusion = fusion_experiment(data_paths=dataset_optimize.data_paths, similar=["most", "least"],
                                           parameter_file=["Par0001translation.txt", "Par0001bspline16.txt"],
                                           fusion_methods=["itkvoting", "SIMPLE", "STAPLE"], max_atlases=11)
@@ -213,15 +204,15 @@ if __name__ == '__main__':
                                           fusion_methods=["itkvoting", "SIMPLE", "STAPLE"], max_atlases=11)
 
     #### Validation with known labels #####
-    if RUN==4:
+    if RUN==3:
         result_val, result_paths_val = deploy_model(data_paths_target=dataset_validate.data_paths, data_paths_atlas=dataset_optimize.data_paths,
-                                                    validate=True, fusion_method="SIMPLE", nr_atlas_registration=6,
+                                                    validate=True, fusion_method="SIMPLE", nr_atlas_registration=10, similar="least",
                                             parameter_file=["Par0001translation.txt", "Par0001bspline16.txt"])
     
     #### Model Deployment on unlabeled test data #####
-    if RUN==5:
+    if RUN==4:
         result_paths_test = deploy_model(data_paths_target=dataset_test.data_paths, data_paths_atlas=dataset_optimize.data_paths,
-                                            validate=False, fusion_method="SIMPLE", nr_atlas_registration=6, 
+                                            validate=False, fusion_method="SIMPLE", nr_atlas_registration=10, 
                                             parameter_file=["Par0001translation.txt", "Par0001bspline16.txt"])
     
     
